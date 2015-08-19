@@ -14,12 +14,15 @@
 # sbatch --mem=1009g --partition=largemem
 #
 # Things to note:
-# - The script automatically assumes you are using a node with an 800GiB SSD. If you are using something different, specify the lscratch memory in the RELION GUI
+# - This script will work for RELION 1.3 and 1.4 because the actual naming conventions do not change between these versions. I do not know if this is the case with RELION 1.2
+# - The script automatically assumes you are using a node with an 800GiB SSD. If you are using something different, specify the lscratch memory in the RELION GUI.
 # - If the particle stack exceeds the maximum memory specified, the script will try to fit in as many of the .mrcs files as it can onto the SSD, and the rest of the particles it will use from your Particles/Micrographs/ folder
 # - I do not think there is any point to run this script on nodes with SATA drives. Only use SSD.
 # - m is the name of the Micrographs folder. This is by default "Micrographs", so if your Micrographs folder is called something else, you have to specify it by putting --export=m=foldername in the sbatch submit command in the RELION GUI
-# - maxs is the maximum number of KiB that you want to use on the node. The default is 830000000 (~792 GiB out of the 800 GiB allocated). It seems like leaving extra space on the disk is only useful if you are constantly writing to the disk. Since this copying process is a one time thing, we want to fill up the SSD as much as we can. I asked the biowulf admins, and although they are not sure, they do not think filling up the entire disk will decrease reading performance.
+# - maxs is the maximum number of KiB that you want to use on the node. The default is 838000000 (~799 GiB out of the 800 GiB allocated). If you are using less than this the script should stop when the disk has reached its maximum. However if you are using more than 800GiB, change this variable.
+# - It seems like leaving extra space on the disk is only useful if you are constantly writing to the disk. Since this copying process is a one time thing, we want to fill up the SSD as much as we can. The biowulf admins said they do not think filling up the entire disk will decrease reading performance. Also, it seems like filling up the disk completely does not significantly slow down the copying process at the end.
 # - To export many variables, use --export=m=Micrographs,maxs=830000000
+# - As of Aug 18 2015, it seems like if you export a variable in the RELION gui, it tries to create an entirely new process on each node (for reasons unkown) which messes things up, so do NOT try to export any variables if possible. This bug may be fixed in the future.
 # - By default biowulf2 uses hyperthreading, and it seems like if you specify --ntasks-per-core=2, things get messed up (as of July 30 2015). Though I haven't tried this, specifying this option may solve wierd problems you might encounter.
 # - The main input particles star file should be in the home directory (the directory the GUI was run from). Otherwise you might encounter some problems. You can also link this starfile. To link files, type the following into the command line:
 #	ln -s /complete/path/to/file.star /path/to/home/directory/
@@ -36,10 +39,10 @@
 # - After extensive testing, it seems like compressing the file before transfering does not reduce time, using a variety of different compressions and compression speeds, but instead greatly increases the total time while only slightly decreasing the copying time. Combining the files without compression before copying over also does not seem to save time. Copying to each node's disk is just too fast, and any attempt to decrease the amount of data sent will only increase the total time. 
 # - When running Movie processing, I don't think it uses the particle stack from the averaged micrographs. However, if it actually does, the script could be changed to also modify the data.star files of those particle stacks, and copy those stacks to /lscratch. However, the Movie particles alone are often larger than 800GiB, so it probably wouldn't make a difference.
 # - Running Movie processing with this script might actually take more time because it would take so long to copy the files. However, I don't think that is the case.
-# - At some steps, particularly Movie processing, the script might use files that still have /lscratch/ in the star file, and it is unable to change them (because though I think classification and refinement steps only use the .star files given, I have not figured out all of the files the Movie processing steps use). You will have to manually change them by doing the steps listed above. To see what files have /lscratch/ in them, you can run the following from your home directory:
+# - At some steps, particularly Movie processing, the script might use files that still have /lscratch/ in the star file, and it is unable to change them (because though the classification and refinement steps only use the .star files given, this may not be the case with the Movie processing steps). You will have to manually change them by doing the steps listed above. To see what files have /lscratch/ in them, you can run the following from your home directory:
 # - 	grep -r lscratch *.star | awk '{print $1}' | perl -pe "s|star.*?mrcs|star|" | uniq
 # - Allocate the memory by node (using --mem-125g) instead of by cpu (--mem-per-cpu=4g).
-# - You can check the progress of the copying process on each node by looking at the .out files, or ussing ssh to access the lscratch directory of each node
+# - You can check the progress of the copying process on each node by looking at the .out files, or ussing ssh to access the lscratch directory of each node. If you see that files are no longer copying to the disk, wait a few minutes, and the script should take care of it. If this is still the case, something may have went wrong.
 #
 
 # Setting up things
@@ -72,7 +75,7 @@ if [ -z "$m" ]; then
 fi
 
 if [ -z "$maxs" ]; then
-	maxs=830000000
+	maxs=838000000
 fi
 
 # Check if you are continuing a run or running movie processing

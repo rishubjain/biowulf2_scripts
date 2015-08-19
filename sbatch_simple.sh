@@ -32,7 +32,6 @@
 
 #SBATCH --job-name="rlnXXXnameXXX"
 #SBATCH --ntasks=XXXmpinodesXXX
-#SBATCH --exclusive
 #SBATCH --error=XXXerrfileXXX
 #SBATCH --output=XXXoutfileXXX
 #SBATCH --time=10-00:00:00
