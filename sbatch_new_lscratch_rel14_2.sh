@@ -157,12 +157,14 @@ echo nodes: ${nlist[@]}
 # and start copying them one by one to avoid overtaxing the file system
 
 declare -A stacknums
+unset ustacks
 scount=0
 
 for dstack in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}| grep -oP "\/\w*\.mrcs" | sed "s|/||" | sort | uniq`
 do
 	scount=$(( scount + 1 ))
 	stacknums[$dstack]=$scount
+	ustacks=("${ustacks[@]}" $dstack)
 done
 
 declare -A pvals
@@ -173,7 +175,7 @@ for parts in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile
 
         pnum=$(echo $x | perl -pe "s|\@.*?mrcs||g")
         pstack=$(echo $x | grep -oP "\/\w*\.mrcs" | sed "s|/||")
-        matrix[$i,$j]=
+        pvals[$i,$j]=
 
 done
 
@@ -186,7 +188,7 @@ echo started copying files at $(date)
 
 filled=0
 
-for dstack in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}| grep -oP "\/\w*\.mrcs" | sed "s|/||" | sort | uniq`
+for dstack in ${ustacks[*]}
 	do
 
 	if [ "$filled" -eq 0 ]; then
