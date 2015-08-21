@@ -13,7 +13,7 @@
 # 
 # sbatch --mem=1009g --partition=largemem
 #
-# Things to note before running this script:
+# Things to note:
 # - You should have a good idea about how clusters, specifically biowulf2, work when using this script. You must run this script using entirely free nodes.
 # - This script will work for RELION 1.3 and 1.4 because the actual naming conventions do not change between these versions. I do not know if this is the case with RELION 1.2
 # - The script automatically assumes you are using a node with an 800GiB SSD. If you are using something different, specify the lscratch memory in the RELION GUI using --gres=lscratch:800.
@@ -60,7 +60,7 @@
 #SBATCH --mem=125g
 
 module load RELION/1.4-beta-2
-echo This is sbatch_new_lscratch_rel14.sh, last modified Aug 18 2015
+echo This is sbatch_new_lscratch_rel14_2.sh, last modified Aug 20 2015
 echo run started on: $(date)
 echo running on $SLURM_SUBMIT_DIR
 echo with job id $SLURM_JOBID
@@ -156,138 +156,11 @@ echo nodes: ${nlist[@]}
 # Now find unique names for stack in the the star file
 # and start copying them one by one to avoid overtaxing the file system
 
-unset ustacks
-unset ustacks2
-unset stacknums
-declare -A stacknums
-scount=0
-
-for dstack in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}| grep -oP "\/\w*\.mrcs" | sed "s|/||" | sort | uniq`
-do
-	scount=$(( scount + 1 ))
-	stacknums[$dstack]=$scount
-	ustacks=("${ustacks[@]}" $dstack)
-	ustacks2=("${ustacks2[@]}" Particles/$m/$dstack)
-done
-
-
-stacklen=$(du -cs ${ustacks2[*]} | tail -n 1 | awk '{print $1}')
-if [ $stacklen -gt $maxs ]; then # or an exported variable
-#they can set yes or no
- 
-module load IMOD
-
-numparts=0
-
-for x in ${ustacks2[*]}
-do
-	ts=$( header $x -s | awk '{print $3}' )
-	numparts=$(( numparts + ts ))
-done
-
-maxp=$(( (maxs - 100000) / (stacklen/numparts) ))
-
-unset secslist
-unset restplist
-unset secs
-declare -A secs
-unset restp
-declare -A restp
-unset secssize
-declare -A secssize
-unset restpsize
-declare -A restpsize
-unset pvals
-declare -A pvals
-unset wstack
-declare -A wstack
-unset addf
-declare -A addf
-
-overf=0
-secscount=0
-restpcount=0
-pwrit=0
-
-# one file, reduces overhead
-
-for parts in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}`
-        do
-
-	IFS=' @ ' read -a pinfo <<< $parts 
-        pnum=${pinfo[0]}
-	pstack=${pinfo[1]}
-	
-if [ $pwrit -gt $maxp ]; then
-	overf=1
-	if [ -z "${restp[$pstack]}" ]; then
-		restp[$pstack]="$pnum"
-		restplist=("${restplist[@]}" $pstack)
-		restpsize[$pstack]=1
-		restpcount=$(( restpcount + 1 ))
-	else
-		restpsize[$pstack]=$(( ${restpsize[$pstack]} + 1 ))
-		restp[$pstack]="${restp[$pstack]},${pnum}"
-	fi
-        pvals[${stacknums[$pstack]},$pnum]=${restpsize[$pstack]}
-	wstack[${stacknums[$pstack]},$pnum]=Particles/$m/not_copied_stack_${SLURM_JOBID}.mrcs
-
-else
-
-	if [ -z "${secs[$pstack]}" ]; then
-		secs[$pstack]="$pnum"
-		secslist=("${secslist[@]}" $pstack)
-		secssize[$pstack]=1
-		secscount=$(( secscount + 1 ))
-	else
-		secssize[$pstack]=$(( ${secssize[$pstack]} + 1 ))
-		secs[$pstack]="${secs[$pstack]},${pnum}"
-	fi
-        pvals[${stacknums[$pstack]},$pnum]=${secssize[$pstack]}
-	wstack[${stacknums[$pstack]},$pnum]=Particles/$m/copied_stack_${SLURM_JOBID}.mrcs
-fi
-
-pwrit=$(( pwrit + 1 ))
-
-done
-
-caddf=0
-
-echo $secscount > copied_particles_${SLURM_JOBID}.in
-for x in ${secslist[*]}
-do
-	echo $x >> copied_particles_${SLURM_JOBID}.in
-	echo ${secs[$x]} >> copied_particles_${SLURM_JOBID}.in
-	addf[$x]=$caddf
-	caddf=$(( caddf + ${secssize[$x]} ))
-done
-# can optimize this: run both newstacks at once, or figure out how to run newstack in parallel
-
-newstack -fr -filei copied_particles_${SLURM_JOBID}.in -ou copied_stack_${SLURM_JOBID}.mrcs
-
-if [ $overf -eq 1 ]; then
-
-echo $restpcount > not_copied_particles_${SLURM_JOBID}.in
-for x in ${restplist[*]}
-do
-        echo $x >> not_copied_particles_${SLURM_JOBID}.in
-        echo ${restp[$x]} >> not_copied_particles_${SLURM_JOBID}.in
-done
-
-fi
-# change star files, add trailing zeroes, and add addf
-# fix grep,  don't use sed, but rather IFS, etc. Look at todo.
-# copy in this if statement, do a different copy for below.
-# update comments
-# make it so that you can have dashes in the filename
-# automatically puts it in Particles/Micrographs.
-
-fi
 echo started copying files at $(date)
 
 filled=0
 
-for dstack in ${ustacks[*]}
+for dstack in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}| grep -oP "\/\w*\.mrcs" | sed "s|/||" | sort | uniq`
 	do
 
 	if [ "$filled" -eq 0 ]; then
