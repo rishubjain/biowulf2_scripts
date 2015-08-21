@@ -159,16 +159,13 @@ echo nodes: ${nlist[@]}
 unset ustacks
 unset ustacks2
 unset stacknums
-unset curpos
 declare -A stacknums
-declare -A curpos
 scount=0
 
 for dstack in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}| grep -oP "\/\w*\.mrcs" | sed "s|/||" | sort | uniq`
 do
 	scount=$(( scount + 1 ))
 	stacknums[$dstack]=$scount
-	curpos[$dstack]=1
 	ustacks=("${ustacks[@]}" $dstack)
 	ustacks2=("${ustacks2[@]}" Particles/$m/$dstack)
 done
@@ -190,63 +187,85 @@ done
 
 maxp=$(( (maxs - 100000) / (stacklen/numparts) ))
 
-unset secs
-unset pvals
-unset restp
 unset secslist
 unset restplist
+unset secs
 declare -A secs
+unset restp
 declare -A restp
+unset secssize
+declare -A secssize
+unset restpsize
+declare -A restpsize
+unset pvals
 declare -A pvals
+unset wstack
+declare -A wstack
+unset addf
+declare -A addf
+
 overf=0
 secscount=0
 restpcount=0
-
 pwrit=0
+
+# one file, reduces overhead
 
 for parts in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}`
         do
 
-	
 	IFS=' @ ' read -a pinfo <<< $parts 
         pnum=${pinfo[0]}
 	pstack=${pinfo[1]}
-        pvals[${stacknums[$pstack]},$pnum]=${curpos[$pstack]}
-	curpos[$pstack]=$(( ${curpos[$pstack]} + 1 ))
-# fix this
 	
 if [ $pwrit -gt $maxp ]; then
 	overf=1
 	if [ -z "${restp[$pstack]}" ]; then
 		restp[$pstack]="$pnum"
 		restplist=("${restplist[@]}" $pstack)
+		restpsize[$pstack]=1
 		restpcount=$(( restpcount + 1 ))
 	else
+		restpsize[$pstack]=$(( ${restpsize[$pstack]} + 1 ))
 		restp[$pstack]="${restp[$pstack]},${pnum}"
 	fi
+        pvals[${stacknums[$pstack]},$pnum]=${restpsize[$pstack]}
+	wstack[${stacknums[$pstack]},$pnum]=Particles/$m/not_copied_stack_${SLURM_JOBID}.mrcs
 
 else
 
 	if [ -z "${secs[$pstack]}" ]; then
 		secs[$pstack]="$pnum"
 		secslist=("${secslist[@]}" $pstack)
+		secssize[$pstack]=1
 		secscount=$(( secscount + 1 ))
 	else
+		secssize[$pstack]=$(( ${secssize[$pstack]} + 1 ))
 		secs[$pstack]="${secs[$pstack]},${pnum}"
 	fi
-
+        pvals[${stacknums[$pstack]},$pnum]=${secssize[$pstack]}
+	wstack[${stacknums[$pstack]},$pnum]=Particles/$m/copied_stack_${SLURM_JOBID}.mrcs
 fi
 
 pwrit=$(( pwrit + 1 ))
 
 done
 
+caddf=0
+
 echo $secscount > copied_particles_${SLURM_JOBID}.in
 for x in ${secslist[*]}
 do
 	echo $x >> copied_particles_${SLURM_JOBID}.in
 	echo ${secs[$x]} >> copied_particles_${SLURM_JOBID}.in
+	addf[$x]=$caddf
+	caddf=$(( caddf + ${secssize[$x]} ))
 done
+# can optimize this: run both newstacks at once, or figure out how to run newstack in parallel
+
+newstack -fr -filei copied_particles_${SLURM_JOBID}.in -ou copied_stack_${SLURM_JOBID}.mrcs
+
+if [ $overf -eq 1 ]; then
 
 echo $restpcount > not_copied_particles_${SLURM_JOBID}.in
 for x in ${restplist[*]}
@@ -255,14 +274,15 @@ do
         echo ${restp[$x]} >> not_copied_particles_${SLURM_JOBID}.in
 done
 
-
-for x in $stacknums
-do
-        newstack -fr -filei ${SLURM_SUBMIT_DIR}/Particles/${m}/${x} -ou ${SLURM_SUBMIT_DIR}/Particles/${m}/${x} -se 000100,000002
-done
+fi
+# change star files, add trailing zeroes, and add addf
+# fix grep,  don't use sed, but rather IFS, etc. Look at todo.
+# copy in this if statement, do a different copy for below.
+# update comments
+# make it so that you can have dashes in the filename
+# automatically puts it in Particles/Micrographs.
 
 fi
-
 echo started copying files at $(date)
 
 filled=0
