@@ -13,7 +13,7 @@
 # 
 # sbatch --mem=1009g --partition=largemem
 #
-# Things to note:
+# Things to note before running this script:
 # - You should have a good idea about how clusters, specifically biowulf2, work when using this script. You must run this script using entirely free nodes.
 # - This script will work for RELION 1.3 and 1.4 because the actual naming conventions do not change between these versions. I do not know if this is the case with RELION 1.2
 # - The script automatically assumes you are using a node with an 800GiB SSD. If you are using something different, specify the lscratch memory in the RELION GUI using --gres=lscratch:800.
@@ -156,33 +156,112 @@ echo nodes: ${nlist[@]}
 # Now find unique names for stack in the the star file
 # and start copying them one by one to avoid overtaxing the file system
 
-declare -A stacknums
 unset ustacks
+unset ustacks2
+unset stacknums
+unset curpos
+declare -A stacknums
+declare -A curpos
 scount=0
 
 for dstack in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}| grep -oP "\/\w*\.mrcs" | sed "s|/||" | sort | uniq`
 do
 	scount=$(( scount + 1 ))
 	stacknums[$dstack]=$scount
+	curpos[$dstack]=1
 	ustacks=("${ustacks[@]}" $dstack)
+	ustacks2=("${ustacks2[@]}" Particles/$m/$dstack)
 done
 
+
+stacklen=$(du -cs ${ustacks2[*]} | tail -n 1 | awk '{print $1}')
+if [ $stacklen -gt $maxs ]; then # or an exported variable
+#they can set yes or no
+ 
+module load IMOD
+
+numparts=0
+
+for x in ${ustacks2[*]}
+do
+	ts=$( header $x -s | awk '{print $3}' )
+	numparts=$(( numparts + ts ))
+done
+
+maxp=$(( (maxs - 100000) / (stacklen/numparts) ))
+
+unset secs
+unset pvals
+unset restp
+unset secslist
+unset restplist
+declare -A secs
+declare -A restp
 declare -A pvals
-declare -a 
+overf=0
+secscount=0
+restpcount=0
+
+pwrit=0
 
 for parts in `awk -v c=${col[1]} '{if (NF<= 2) {} else {print $c}}' < ${starfile}`
         do
 
-        pnum=$(echo $x | perl -pe "s|\@.*?mrcs||g")
-        pstack=$(echo $x | grep -oP "\/\w*\.mrcs" | sed "s|/||")
-        pvals[$i,$j]=
+	
+	IFS=' @ ' read -a pinfo <<< $parts 
+        pnum=${pinfo[0]}
+	pstack=${pinfo[1]}
+        pvals[${stacknums[$pstack]},$pnum]=${curpos[$pstack]}
+	curpos[$pstack]=$(( ${curpos[$pstack]} + 1 ))
+# fix this
+	
+if [ $pwrit -gt $maxp ]; then
+	overf=1
+	if [ -z "${restp[$pstack]}" ]; then
+		restp[$pstack]="$pnum"
+		restplist=("${restplist[@]}" $pstack)
+		restpcount=$(( restpcount + 1 ))
+	else
+		restp[$pstack]="${restp[$pstack]},${pnum}"
+	fi
+
+else
+
+	if [ -z "${secs[$pstack]}" ]; then
+		secs[$pstack]="$pnum"
+		secslist=("${secslist[@]}" $pstack)
+		secscount=$(( secscount + 1 ))
+	else
+		secs[$pstack]="${secs[$pstack]},${pnum}"
+	fi
+
+fi
+
+pwrit=$(( pwrit + 1 ))
 
 done
+
+echo $secscount > copied_particles_${SLURM_JOBID}.in
+for x in ${secslist[*]}
+do
+	echo $x >> copied_particles_${SLURM_JOBID}.in
+	echo ${secs[$x]} >> copied_particles_${SLURM_JOBID}.in
+done
+
+echo $restpcount > not_copied_particles_${SLURM_JOBID}.in
+for x in ${restplist[*]}
+do
+        echo $x >> not_copied_particles_${SLURM_JOBID}.in
+        echo ${restp[$x]} >> not_copied_particles_${SLURM_JOBID}.in
+done
+
 
 for x in $stacknums
 do
-        newstack -fr -in ${SLURM_SUBMIT_DIR}/Particles/${m}/${x} -ou ${SLURM_SUBMIT_DIR}/Particles/${m}/${x} -se 000100,000002
+        newstack -fr -filei ${SLURM_SUBMIT_DIR}/Particles/${m}/${x} -ou ${SLURM_SUBMIT_DIR}/Particles/${m}/${x} -se 000100,000002
 done
+
+fi
 
 echo started copying files at $(date)
 
