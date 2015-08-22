@@ -20,7 +20,7 @@
 # Submit to queue?: Yes
 # Queue name: <LEAVE BLANK>
 # Queue submit command: sbatch --mem=1009g --partition=largemem
-# Standard submission script: sbatch_new_lscratch_rel14.sh (or wherever it is located)
+# Standard submission script: sbatch_simple.sh (or wherever it is located)
 #
 #
 # Things to note:
@@ -40,6 +40,7 @@
 #       mv particles.star.mod particles.star
 # - This script is specific to how biowulf2 functions as of August 2015 (how it specifies the list of nodes, etc.). As biowulf2 changes this script should be changed.
 # - Allocate the memory by node (using --mem-125g) instead of by cpu (--mem-per-cpu=4g).
+# - Look at the sbatch_new_lscratch_rel14.sh comments for more information.
 #
 
 # Setting up things
